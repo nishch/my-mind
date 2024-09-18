@@ -7,6 +7,12 @@ RUN apk add --no-cache make
 # Set the working directory
 WORKDIR /app
 
+# Copy package.json and package-lock.json to the working directory
+COPY package*.json ./
+
+# Install the dependencies
+RUN npm install
+
 # Copy the source code into the container
 COPY . .
 
