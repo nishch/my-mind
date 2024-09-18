@@ -2095,7 +2095,9 @@ ${text}`);
           if (!response || !response.id) {
             return reject(response && response.error || new Error("Failed to download file"));
           }
-          let headers = { "Authentication": "Bearer " + gapi.auth.getToken().access_token };
+          let headers = {
+            Authentication: "Bearer " + gapi.auth.getToken().access_token
+          };
           let r = await fetch(`https://www.googleapis.com/drive/v2/files/${response.id}?alt=media`, { headers });
           let data = await r.text();
           if (r.status != 200) {
@@ -2152,9 +2154,9 @@ ${text}`);
   async function auth(forceUI = false) {
     return new Promise((resolve, reject) => {
       gapi.auth.authorize({
-        "client_id": CLIENT_ID,
-        "scope": SCOPE,
-        "immediate": !forceUI
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        immediate: !forceUI
       }, async (token) => {
         if (token && !token.error) {
           resolve();
@@ -3049,6 +3051,9 @@ ${text}`);
     children: false
   };
   var Item = class {
+    static fromJSON(data) {
+      return new this().fromJSON(data);
+    }
     constructor() {
       this._id = generateId();
       this._parent = null;
@@ -3094,9 +3099,6 @@ ${text}`);
         selectItem(this);
       });
       this.updateToggle();
-    }
-    static fromJSON(data) {
-      return new this().fromJSON(data);
     }
     get id() {
       return this._id;
