@@ -1,5 +1,5 @@
 # Use an official image as a parent image
-FROM alpine:latest AS builder
+FROM node:20-alpine AS builder
 
 # Install dependencies
 RUN apk add --no-cache make
