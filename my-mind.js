@@ -2450,10 +2450,7 @@
   new class InsertChild extends Command {
     constructor() {
       super("insert-child", "Insert a child");
-      this.keys = [
-        { code: "Tab", ctrlKey: false },
-        { code: "Insert" }
-      ];
+      this.keys = [{ code: "Tab", ctrlKey: false }, { code: "Insert" }];
     }
     execute() {
       let item = currentItem;
@@ -2480,8 +2477,8 @@
     constructor() {
       super("swap", "Swap sibling");
       this.keys = [
-        { code: "ArrowUp", ctrlKey: true },
-        { code: "ArrowDown", ctrlKey: true }
+        { code: "ArrowUp", altKey: true },
+        { code: "ArrowDown", altKey: true }
       ];
     }
     execute(e) {
@@ -2498,8 +2495,8 @@
     constructor() {
       super("side", "Change side");
       this.keys = [
-        { code: "ArrowLeft", ctrlKey: true },
-        { code: "ArrowRight", ctrlKey: true }
+        { code: "ArrowLeft", altKey: true },
+        { code: "ArrowRight", altKey: true }
       ];
     }
     execute(e) {
@@ -2623,10 +2620,10 @@
     }
     step() {
       const dirs = {
-        "KeyW": [0, 1],
-        "KeyA": [1, 0],
-        "KeyS": [0, -1],
-        "KeyD": [-1, 0]
+        KeyW: [0, 1],
+        KeyA: [1, 0],
+        KeyS: [0, -1],
+        KeyD: [-1, 0]
       };
       let offset = [0, 0];
       this.codes.forEach((code) => {
