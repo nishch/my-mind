@@ -2028,9 +2028,11 @@ ${text}`);
   };
 
   // .js/backend/gdrive.js
-  var SCOPE = "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.install";
-  var CLIENT_ID = "767837575056-h87qmlhmhb3djhaaqta5gv2v3koa9hii.apps.googleusercontent.com";
-  var API_KEY = "AIzaSyCzu1qVxlgufneOYpBgDJXN6Z9SNVcHYWM";
+  var DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
+  var SCOPES = "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/docs";
+  var CLIENT_ID = "245823865902-v6m24s7d3jsi89hoq6jn3249hnef73nf.apps.googleusercontent.com";
+  var API_KEY = "AIzaSyCfVaJ0wA2DDfDHLzs7MwuqiiXH385LXHQ";
+  var tokenClient;
   var GDrive = class extends Backend {
     constructor() {
       super("gdrive");
@@ -2041,6 +2043,7 @@ ${text}`);
     }
     async save(data, name, mime) {
       await connect();
+      console.log("all good to go");
       this.fileId = await this.send(data, name, mime);
     }
     send(data, name, mime) {
@@ -2086,26 +2089,15 @@ ${text}`);
     async load(id) {
       await connect();
       this.fileId = id;
-      var request = gapi.client.request({
-        path: "/drive/v2/files/" + this.fileId,
-        method: "GET"
-      });
-      return new Promise((resolve, reject) => {
-        request.execute(async (response) => {
-          if (!response || !response.id) {
-            return reject(response && response.error || new Error("Failed to download file"));
-          }
-          let headers = {
-            Authentication: "Bearer " + gapi.auth.getToken().access_token
-          };
-          let r = await fetch(`https://www.googleapis.com/drive/v2/files/${response.id}?alt=media`, { headers });
-          let data = await r.text();
-          if (r.status != 200) {
-            return reject(data);
-          }
-          resolve({ data, name: response.title, mime: response.mimeType });
-        });
-      });
+      const [fileMeta, file] = await Promise.all([
+        gapi.client.drive.files.get({ fileId: this.fileId }),
+        gapi.client.drive.files.get({ fileId: this.fileId, alt: "media" })
+      ]);
+      return {
+        data: file.body,
+        name: fileMeta.result.name,
+        mime: fileMeta.result.mimeType
+      };
     }
     async pick() {
       await connect();
@@ -2134,43 +2126,64 @@ ${text}`);
     }
   };
   async function connect() {
-    if ("gapi" in window && gapi.auth.getToken()) {
-      return;
-    } else {
-      await loadGapi();
-      return auth();
-    }
+    await Promise.all([loadGapi(), loadGis()]);
+    return new Promise((resolve, reject) => {
+      tokenClient.callback = (resp) => {
+        if (resp.error) {
+          reject(resp.error);
+          return;
+        }
+        resolve();
+      };
+      if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({ prompt: "consent" });
+      } else {
+        resolve();
+      }
+    });
+  }
+  async function initializeGapiClient(cb) {
+    await gapi.client.init({
+      apiKey: API_KEY,
+      discoveryDocs: [DISCOVERY_DOC]
+    });
+    cb();
+  }
+  function gapiLoaded(cb) {
+    gapi.load("client:picker", initializeGapiClient.bind(null, cb));
+  }
+  function gisLoaded(cb) {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: ""
+    });
+    cb();
   }
   function loadGapi() {
-    if ("gapi" in window) {
-      return;
-    }
-    let script = document.createElement("script");
-    let name = ("cb" + Math.random()).replace(".", "");
-    script.src = "https://apis.google.com/js/client:picker.js?onload=" + name;
-    document.body.append(script);
-    return new Promise((resolve) => window[name] = resolve);
+    return new Promise((resolve) => {
+      if ("gapi" in window) {
+        resolve();
+        return;
+      }
+      let script = document.createElement("script");
+      script.setAttribute("src", "https://apis.google.com/js/api.js");
+      script.setAttribute("async", "");
+      script.onload = gapiLoaded.bind(null, resolve);
+      document.body.append(script);
+    });
   }
-  async function auth(forceUI = false) {
-    return new Promise((resolve, reject) => {
-      gapi.auth.authorize({
-        client_id: CLIENT_ID,
-        scope: SCOPE,
-        immediate: !forceUI
-      }, async (token) => {
-        if (token && !token.error) {
-          resolve();
-        } else if (!forceUI) {
-          try {
-            await auth(true);
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        } else {
-          reject(token && token.error || new Error("Failed to authorize with Google"));
-        }
-      });
+  function loadGis() {
+    return new Promise((resolve) => {
+      if ("google" in window && google.accounts) {
+        resolve();
+        return;
+      }
+      let script = document.createElement("script");
+      script.setAttribute("src", "https://accounts.google.com/gsi/client");
+      script.setAttribute("async", "");
+      script.onload = gisLoaded.bind(null, resolve);
+      document.body.append(script);
     });
   }
 
@@ -2249,7 +2262,7 @@ ${text}`);
         data: null
       };
     }
-    connect(server, auth2) {
+    connect(server, auth) {
       var config = {
         apiKey: "AIzaSyBO_6uCK8pHjoz1c9htVwZi6Skpm8o4LtQ",
         authDomain: "my-mind.firebaseapp.com",
@@ -2263,8 +2276,8 @@ ${text}`);
       this.ref.child("names").on("value", (snap) => {
         publish("firebase-list", this, snap.val() || {});
       }, this);
-      if (auth2) {
-        return this.login(auth2);
+      if (auth) {
+        return this.login(auth);
       }
     }
     save(data, id, name) {
@@ -2404,9 +2417,9 @@ ${text}`);
     constructor() {
       super(new Firebase(), "Firebase");
       this.online = false;
-      const { server, auth: auth2, remove, go } = this;
+      const { server, auth, remove, go } = this;
       server.value = localStorage.getItem(`${this.prefix}.server`) || "my-mind";
-      auth2.value = localStorage.getItem(`${this.prefix}.auth`) || "";
+      auth.value = localStorage.getItem(`${this.prefix}.auth`) || "";
       go.disabled = false;
       remove.addEventListener("click", async (_) => {
         var id = this.list.value;
@@ -2523,16 +2536,16 @@ ${text}`);
         this.error(e);
       }
     }
-    async connect(server, auth2) {
+    async connect(server, auth) {
       this.server.value = server;
-      this.auth.value = auth2 || "";
+      this.auth.value = auth || "";
       this.server.disabled = true;
       this.auth.disabled = true;
       localStorage.setItem(`${this.prefix}.server`, server);
-      localStorage.setItem(`${this.prefix}.auth`, auth2 || "");
+      localStorage.setItem(`${this.prefix}.auth`, auth || "");
       this.go.disabled = true;
       setThrobber(true);
-      await this.backend.connect(server, auth2);
+      await this.backend.connect(server, auth);
       setThrobber(false);
       this.online = true;
       this.sync();

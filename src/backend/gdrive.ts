@@ -4,11 +4,16 @@ import { repo as formatRepo } from "../format/format.js";
 declare const google: any;
 declare const gapi: any;
 
-const SCOPE =
-  "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata";
+// const FOLDER_ID = "1nDezb6ycCqDfYydS6hdrHnfkkGOgRxPa";
+const DISCOVERY_DOC =
+  "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
+const SCOPES =
+  "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/docs";
 const CLIENT_ID =
   "245823865902-v6m24s7d3jsi89hoq6jn3249hnef73nf.apps.googleusercontent.com";
 const API_KEY = "AIzaSyCfVaJ0wA2DDfDHLzs7MwuqiiXH385LXHQ";
+
+let tokenClient: any;
 
 export interface LoadedData {
   name: string;
@@ -80,35 +85,16 @@ export default class GDrive extends Backend {
     await connect();
     this.fileId = id;
 
-    var request = gapi.client.request({
-      path: "/drive/v2/files/" + this.fileId,
-      method: "GET"
-    });
+    const [fileMeta, file] = await Promise.all([
+      gapi.client.drive.files.get({ fileId: this.fileId }),
+      gapi.client.drive.files.get({ fileId: this.fileId, alt: "media" })
+    ]);
 
-    return new Promise<LoadedData>((resolve, reject) => {
-      request.execute(async (response: any) => {
-        if (!response || !response.id) {
-          return reject(
-            (response && response.error) || new Error("Failed to download file")
-          );
-        }
-
-        let headers = {
-          Authentication: "Bearer " + gapi.auth.getToken().access_token
-        };
-
-        let r = await fetch(
-          `https://www.googleapis.com/drive/v2/files/${response.id}?alt=media`,
-          { headers }
-        );
-        let data = await r.text();
-        if (r.status != 200) {
-          return reject(data);
-        }
-
-        resolve({ data, name: response.title, mime: response.mimeType });
-      });
-    });
+    return {
+      data: file.body,
+      name: fileMeta.result.name,
+      mime: fileMeta.result.mimeType
+    };
   }
 
   async pick() {
@@ -151,55 +137,77 @@ export default class GDrive extends Backend {
 }
 
 async function connect() {
-  if ("gapi" in window && gapi.auth.getToken()) {
-    return;
-  } else {
-    await loadGapi();
-    return auth();
-  }
+  await Promise.all([loadGapi(), loadGis()]);
+  return new Promise<void>((resolve, reject) => {
+    tokenClient.callback = (resp) => {
+      if (resp.error) {
+        reject(resp.error);
+        return;
+      }
+
+      resolve();
+    };
+    if (gapi.client.getToken() === null) {
+      // Prompt the user to select a Google Account and ask for consent to share their data
+      // when establishing a new session.
+      tokenClient.requestAccessToken({ prompt: "consent" });
+    } else {
+      resolve();
+      // Skip display of account chooser and consent dialog for an existing session.
+      // tokenClient.requestAccessToken({ prompt: "" });
+    }
+  });
+}
+
+async function initializeGapiClient(cb) {
+  await gapi.client.init({
+    apiKey: API_KEY,
+    discoveryDocs: [DISCOVERY_DOC]
+  });
+  cb();
+}
+
+function gapiLoaded(cb) {
+  gapi.load("client:picker", initializeGapiClient.bind(null, cb));
+}
+
+function gisLoaded(cb) {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: "" // defined later
+  });
+  cb();
 }
 
 function loadGapi() {
-  if ("gapi" in window) {
-    return;
-  }
+  return new Promise<void>((resolve) => {
+    if ("gapi" in window) {
+      resolve();
+      return;
+    }
 
-  let script = document.createElement("script");
-  let name = ("cb" + Math.random()).replace(".", "");
-  script.src = "https://apis.google.com/js/client:picker.js?onload=" + name;
-  document.body.append(script);
+    let script = document.createElement("script");
+    script.setAttribute("src", "https://apis.google.com/js/api.js");
+    script.setAttribute("async", "");
+    script.onload = gapiLoaded.bind(null, resolve);
 
-  return new Promise((resolve) => ((window as any)[name] = resolve));
+    document.body.append(script);
+  });
 }
 
-async function auth(forceUI = false) {
-  return new Promise<void>((resolve, reject) => {
-    gapi.auth.authorize(
-      {
-        client_id: CLIENT_ID,
-        scope: SCOPE,
-        immediate: !forceUI
-      },
-      async (token: any) => {
-        if (token && !token.error) {
-          // done
-          resolve();
-        } else if (!forceUI) {
-          // try again with ui
-          try {
-            await auth(true);
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        } else {
-          // bad luck
-          reject(
-            (token && token.error) ||
-              new Error("Failed to authorize with Google")
-          );
-        }
-      }
-    );
+function loadGis() {
+  return new Promise<void>((resolve) => {
+    if ("google" in window && google.accounts) {
+      resolve();
+      return;
+    }
+
+    let script = document.createElement("script");
+    script.setAttribute("src", "https://accounts.google.com/gsi/client");
+    script.setAttribute("async", "");
+    script.onload = gisLoaded.bind(null, resolve);
+
+    document.body.append(script);
   });
 }
