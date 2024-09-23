@@ -13,7 +13,7 @@ const CLIENT_ID =
   "245823865902-v6m24s7d3jsi89hoq6jn3249hnef73nf.apps.googleusercontent.com";
 const API_KEY = "AIzaSyCfVaJ0wA2DDfDHLzs7MwuqiiXH385LXHQ";
 
-let tokenClient: any;
+let tokenClient: any, tokenExpiresAt: Date;
 
 export interface LoadedData {
   name: string;
@@ -145,9 +145,13 @@ async function connect() {
         return;
       }
 
+      const now = new Date();
+      now.setSeconds(now.getSeconds() + resp.expires_in - 600);
+      tokenExpiresAt = now;
       resolve();
     };
-    if (gapi.client.getToken() === null) {
+
+    if (gapi.client.getToken() === null || new Date() > tokenExpiresAt) {
       // Prompt the user to select a Google Account and ask for consent to share their data
       // when establishing a new session.
       tokenClient.requestAccessToken({ prompt: "consent" });

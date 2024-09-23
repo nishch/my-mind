@@ -1947,6 +1947,7 @@
   var CLIENT_ID = "245823865902-v6m24s7d3jsi89hoq6jn3249hnef73nf.apps.googleusercontent.com";
   var API_KEY = "AIzaSyCfVaJ0wA2DDfDHLzs7MwuqiiXH385LXHQ";
   var tokenClient;
+  var tokenExpiresAt;
   var GDrive = class extends Backend {
     constructor() {
       super("gdrive");
@@ -2042,13 +2043,17 @@
     await Promise.all([loadGapi(), loadGis()]);
     return new Promise((resolve, reject) => {
       tokenClient.callback = (resp) => {
+        console.log("complete token response", resp);
         if (resp.error) {
           reject(resp.error);
           return;
         }
+        const now = new Date();
+        now.setSeconds(now.getSeconds() + resp.expires_in - 600);
+        tokenExpiresAt = now;
         resolve();
       };
-      if (gapi.client.getToken() === null) {
+      if (gapi.client.getToken() === null || new Date() > tokenExpiresAt) {
         tokenClient.requestAccessToken({ prompt: "consent" });
       } else {
         resolve();
