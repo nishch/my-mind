@@ -7,6 +7,7 @@ import Local from "./backend/local.js";
 import File from "./backend/file.js";
 import Image from "./backend/image.js";
 import GDrive from "./backend/gdrive.js";
+import WebDAV from "./backend/webdav.js";
 
 type BUI = BackendUI<any>;
 
@@ -22,7 +23,7 @@ export function isActive() {
 }
 
 export function init() {
-  [Local, GDrive, File, Image].forEach((ctor) => {
+  [Local, GDrive, File, Image, WebDAV].forEach((ctor) => {
     let bui = new ctor();
     select.append(bui.option);
   });

@@ -2043,7 +2043,6 @@
     await Promise.all([loadGapi(), loadGis()]);
     return new Promise((resolve, reject) => {
       tokenClient.callback = (resp) => {
-        console.log("complete token response", resp);
         if (resp.error) {
           reject(resp.error);
           return;
@@ -2170,6 +2169,130 @@
     }
   };
 
+  // .js/backend/webdav.js
+  var WebDAV = class extends Backend {
+    constructor() {
+      super("webdav");
+    }
+    async save(data, name, id) {
+      return await this.request("POST", `http://localhost:8989/maps/${id}`, JSON.stringify({
+        name,
+        mapData: data
+      }));
+    }
+    async load(id) {
+      const map = await this.request("GET", `http://localhost:8989/maps/${id}`);
+      return map.mind_map;
+    }
+    async remove(id) {
+      await this.request("DELETE", `http://localhost:8989/maps/${id}`);
+    }
+    async list() {
+      const maps = await this.request("GET", "http://localhost:8989/maps");
+      return maps.reduce((a, b) => {
+        a[b.id] = b.name;
+        return a;
+      }, {});
+    }
+    async request(method, url, data) {
+      let init20 = {
+        method,
+        credentials: "include"
+      };
+      if (data) {
+        init20.body = data;
+      }
+      let response = await fetch(url, init20);
+      let resData = await response.json();
+      if (response.ok) {
+        return resData;
+      } else {
+        throw new Error(`HTTP/${response.status}
+
+${resData}`);
+      }
+    }
+  };
+
+  // .js/ui/backend/webdav.js
+  var WebDAVUI = class extends BackendUI {
+    constructor() {
+      super(new WebDAV(), "Generic WebDAV");
+      this.current = "";
+      this.remove.addEventListener("click", async (_) => {
+        var id = this.list.value;
+        if (!id) {
+          return;
+        }
+        await this.backend.remove(id);
+        this.show(this.mode);
+      });
+    }
+    get url() {
+      return this.node.querySelector(".url");
+    }
+    setState(data) {
+      this.load(data.id);
+    }
+    getState() {
+      let data = {
+        b: this.id,
+        id: currentMap.id
+      };
+      return data;
+    }
+    get list() {
+      return this.node.querySelector(".list");
+    }
+    get remove() {
+      return this.node.querySelector(".remove");
+    }
+    async show(mode2) {
+      super.show(mode2);
+      const { go, remove, list } = this;
+      go.disabled = false;
+      if (mode2 == "load") {
+        let stored = await this.backend.list();
+        list.innerHTML = "";
+        if (Object.keys(stored).length) {
+          go.disabled = false;
+          remove.disabled = false;
+          buildList(stored, this.list);
+        } else {
+          this.go.disabled = true;
+          this.remove.disabled = true;
+          let o = document.createElement("option");
+          o.innerHTML = "(no maps saved)";
+          this.list.append(o);
+        }
+      }
+    }
+    async save() {
+      debugger;
+      setThrobber(true);
+      var map = currentMap;
+      let json = map.toJSON();
+      let data = repo6.get("native").to(json);
+      try {
+        await this.backend.save(data, map.name, map.id);
+        this.saveDone();
+      } catch (e) {
+        this.error(e);
+      }
+    }
+    async load(id = this.list.value) {
+      setThrobber(true);
+      try {
+        let data = await this.backend.load(id);
+        var json = repo6.get("native").from(data);
+        this.loadDone(json);
+      } catch (e) {
+        this.error(e);
+        setThrobber(false);
+      }
+    }
+  };
+
   // .js/ui/io.js
   var currentMode = "load";
   var currentBackend = null;
@@ -2180,7 +2303,7 @@
     return node8.contains(document.activeElement);
   }
   function init11() {
-    [LocalUI, GDriveUI, FileUI, ImageUI].forEach((ctor) => {
+    [LocalUI, GDriveUI, FileUI, ImageUI, WebDAVUI].forEach((ctor) => {
       let bui = new ctor();
       select6.append(bui.option);
     });
